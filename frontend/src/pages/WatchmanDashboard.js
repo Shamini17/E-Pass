@@ -5,36 +5,39 @@ import {
   Card,
   CardContent,
   Typography,
-  Box,
   Button,
-  Chip,
+  Box,
   List,
   ListItem,
   ListItemText,
   Divider,
-  Alert,
-  CircularProgress
+  Alert
 } from '@mui/material';
 import {
   QrCodeScanner,
   ExitToApp,
   CheckCircle,
-  Schedule,
-  Cancel
+  Schedule
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { watchmanAPI } from '../services/api';
+import QRScanner from '../components/QRScanner';
+import StudentQRScanner from '../components/StudentQRScanner';
 import { toast } from 'react-toastify';
 
 const WatchmanDashboard = () => {
   const { user } = useAuth();
-  const [todayLogs, setTodayLogs] = useState([]);
-  const [pendingReturns, setPendingReturns] = useState([]);
   const [stats, setStats] = useState({
     todayExits: 0,
     todayEntries: 0,
     pendingReturns: 0
   });
+  const [pendingReturns, setPendingReturns] = useState([]);
+  const [todayLogs, setTodayLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [studentQrScannerOpen, setStudentQrScannerOpen] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -42,27 +45,53 @@ const WatchmanDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [logsResponse, pendingResponse] = await Promise.all([
-        watchmanAPI.getTodayLogs(),
-        watchmanAPI.getPendingReturns()
+      setLoading(true);
+      setError(null);
+
+      const [dashboardResponse, pendingResponse, logsResponse] = await Promise.all([
+        watchmanAPI.getDashboard(),
+        watchmanAPI.getPendingReturns(),
+        watchmanAPI.getTodayLogs()
       ]);
 
-      setTodayLogs(logsResponse.data.logs);
-      setPendingReturns(pendingResponse.data.pendingReturns);
+      setStats(dashboardResponse.data.stats);
+      setPendingReturns(pendingResponse.data.pendingReturns || []);
+      setTodayLogs(logsResponse.data.logs || []);
 
-      // Calculate stats
-      const todayExits = logsResponse.data.logs.filter(log => log.exit_time).length;
-      const todayEntries = logsResponse.data.logs.filter(log => log.entry_time).length;
-      
-      setStats({
-        todayExits,
-        todayEntries,
-        pendingReturns: pendingResponse.data.pendingReturns.length
-      });
     } catch (error) {
+      console.error('Dashboard data fetch error:', error);
+      setError('Failed to fetch dashboard data');
       toast.error('Failed to fetch dashboard data');
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleQrScannerClose = () => {
+    setQrScannerOpen(false);
+    // Refresh dashboard data after QR scan
+    fetchDashboardData();
+  };
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg">
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <Typography variant="h6">Loading...</Typography>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg">
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg">
@@ -140,7 +169,7 @@ const WatchmanDashboard = () => {
                 startIcon={<QrCodeScanner />}
                 fullWidth
                 size="large"
-                href="/watchman/scanner"
+                onClick={() => setQrScannerOpen(true)}
               >
                 Open QR Scanner
               </Button>
@@ -260,6 +289,12 @@ const WatchmanDashboard = () => {
           </Card>
         </Grid>
       </Grid>
+      <QRScanner open={qrScannerOpen} onClose={handleQrScannerClose} />
+      <StudentQRScanner 
+        open={studentQrScannerOpen} 
+        onClose={() => setStudentQrScannerOpen(false)}
+        onScanComplete={handleQrScannerClose}
+      />
     </Container>
   );
 };

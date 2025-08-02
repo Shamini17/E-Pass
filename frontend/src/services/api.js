@@ -56,6 +56,12 @@ export const studentAPI = {
     getActiveOutpass: () => api.get('/students/outpass/active'),
     getOutpassDetails: (id) => api.get(`/students/outpass/${id}`),
     
+    // QR Code
+    generateQR: () => api.post('/students/qr/generate'),
+    getQRStatus: () => api.get('/students/qr/status'),
+    validateQR: (data) => api.post('/students/qr/validate', data),
+    getStudentQR: (studentId) => api.get(`/students/qr/${studentId}`),
+    
     // Notifications
     getNotifications: (params = {}) => api.get('/students/notifications', { params }),
     
@@ -76,7 +82,8 @@ export const wardenAPI = {
 
 // Watchman API
 export const watchmanAPI = {
-    scanQR: (data) => api.post('/watchmen/scan', data),
+    getDashboard: () => api.get('/watchmen/dashboard'),
+    scanQR: (data) => api.post('/watchmen/scan-qr', data),
     getTodayLogs: () => api.get('/watchmen/logs/today'),
     getPendingReturns: () => api.get('/watchmen/pending-returns'),
     getMyLogs: (params = {}) => api.get('/watchmen/my-logs', { params }),

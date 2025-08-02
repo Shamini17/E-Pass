@@ -9,21 +9,27 @@ import {
   Box,
   Button,
   Chip,
-  Avatar,
-  Divider,
   Alert,
-  CircularProgress
+  CircularProgress,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   ExitToApp as ApplyIcon,
   QrCode as QrCodeIcon,
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon
+  Cancel as CancelIcon,
+  QrCode2 as QrCode2Icon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { studentAPI } from '../services/api';
 import { toast } from 'react-toastify';
+import StudentQRCode from '../components/StudentQRCode';
+import DemoQRCode from '../components/DemoQRCode';
 
 // Dashboard Overview Component
 const DashboardOverview = () => {
@@ -32,9 +38,13 @@ const DashboardOverview = () => {
   const [recentHistory, setRecentHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrStatus, setQrStatus] = useState(null);
+  const [demoQrDialogOpen, setDemoQrDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchQRStatus();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -53,6 +63,19 @@ const DashboardOverview = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchQRStatus = async () => {
+    try {
+      const response = await studentAPI.getQRStatus();
+      setQrStatus(response.data);
+    } catch (error) {
+      console.error('Failed to fetch QR status:', error);
+    }
+  };
+
+  const handleGenerateQR = () => {
+    setQrDialogOpen(true);
   };
 
   const getStatusIcon = (status) => {
@@ -125,14 +148,52 @@ const DashboardOverview = () => {
                   <Typography variant="body2" color="textSecondary" gutterBottom>
                     <strong>Reason:</strong> {activeOutpass.reason}
                   </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<QrCodeIcon />}
-                    sx={{ mt: 2 }}
-                    onClick={() => window.open(`/student/outpass/${activeOutpass.id}`, '_blank')}
-                  >
-                    View QR Code
-                  </Button>
+                  
+                  {/* QR Status Display */}
+                  {qrStatus?.has_active_outpass && (
+                    <Box mb={2}>
+                      <Chip
+                        label={`Status: ${qrStatus.current_status}`}
+                        color={qrStatus.current_status === 'inside' ? 'success' : 
+                               qrStatus.current_status === 'outside' ? 'warning' : 'info'}
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                      {qrStatus.qr_code_valid && (
+                        <Chip
+                          label="QR Valid"
+                          color="success"
+                          size="small"
+                        />
+                      )}
+                    </Box>
+                  )}
+                  
+                  <Box display="flex" gap={1}>
+                    <Button
+                      variant="contained"
+                      startIcon={<QrCode2Icon />}
+                      onClick={handleGenerateQR}
+                      disabled={!qrStatus?.has_active_outpass}
+                    >
+                      Generate QR Code
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<QrCodeIcon />}
+                      onClick={() => window.open(`/student/outpass/${activeOutpass.id}`, '_blank')}
+                    >
+                      View Outpass
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      startIcon={<QrCodeIcon />}
+                      onClick={() => setDemoQrDialogOpen(true)}
+                    >
+                      Demo QR
+                    </Button>
+                  </Box>
                 </Box>
               ) : (
                 <Alert severity="info">
@@ -232,14 +293,33 @@ const DashboardOverview = () => {
           </Grid>
         )}
       </Grid>
+
+      {/* QR Code Dialog */}
+      <StudentQRCode
+        open={qrDialogOpen}
+        onClose={() => setQrDialogOpen(false)}
+        studentData={user}
+      />
+      
+      {/* Demo QR Code Dialog */}
+      <DemoQRCode
+        open={demoQrDialogOpen}
+        onClose={() => setDemoQrDialogOpen(false)}
+        studentData={user}
+      />
     </Container>
   );
 };
 
 // Apply Outpass Component
 const ApplyOutpass = () => {
+  // Get today's date in YYYY-MM-DD format for minimum date validation
+  const today = new Date().toISOString().split('T')[0];
+  
   const [formData, setFormData] = useState({
     reason: '',
+    place: '',
+    city: '',
     from_date: '',
     from_time: '',
     to_date: '',
@@ -261,6 +341,8 @@ const ApplyOutpass = () => {
       toast.success('Outpass application submitted successfully!');
       setFormData({
         reason: '',
+        place: '',
+        city: '',
         from_date: '',
         from_time: '',
         to_date: '',
@@ -310,10 +392,45 @@ const ApplyOutpass = () => {
 
               <Grid item xs={12} sm={6}>
                 <input
+                  type="text"
+                  name="place"
+                  placeholder="Place/Address (required)"
+                  value={formData.place}
+                  onChange={handleChange}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px'
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <input
+                  type="text"
+                  name="city"
+                  placeholder="City (required)"
+                  value={formData.city}
+                  onChange={handleChange}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px'
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <input
                   type="date"
                   name="from_date"
                   value={formData.from_date}
                   onChange={handleChange}
+                  min={today}
                   required
                   style={{
                     width: '100%',
@@ -346,6 +463,7 @@ const ApplyOutpass = () => {
                   name="to_date"
                   value={formData.to_date}
                   onChange={handleChange}
+                  min={formData.from_date || today}
                   required
                   style={{
                     width: '100%',
@@ -390,16 +508,16 @@ const ApplyOutpass = () => {
               </Grid>
 
               <Grid item xs={12}>
-                                  <Button
-                    type="submit"
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    disabled={loading}
-                    startIcon={<ApplyIcon />}
-                  >
-                    {loading ? 'Submitting...' : 'Submit Application'}
-                  </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  disabled={loading}
+                  startIcon={<ApplyIcon />}
+                >
+                  {loading ? 'Submitting...' : 'Submit Application'}
+                </Button>
               </Grid>
             </Grid>
           </Box>
@@ -497,6 +615,10 @@ const MyOutpasses = () => {
                 </Typography>
                 
                 <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>Place:</strong> {outpass.place}, {outpass.city}
+                </Typography>
+                
+                <Typography variant="body2" color="textSecondary" gutterBottom>
                   <strong>Time:</strong> {outpass.from_time} - {outpass.to_time}
                 </Typography>
 
@@ -542,8 +664,37 @@ const Profile = () => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     phone: user?.phone || '',
+    room_number: user?.room_number || '',
+    
+    // Academic Information
+    current_year: user?.current_year || 1,
+    department: user?.department || '',
+    branch: user?.branch || '',
+    batch: user?.batch || '',
+    college_name: user?.college_name || '',
+    
+    // Administrative Information
+    warden_name: user?.warden_name || '',
+    warden_contact: user?.warden_contact || '',
+    
+    // Personal Information
+    date_of_birth: user?.date_of_birth || '',
+    blood_group: user?.blood_group || '',
+    gender: user?.gender || '',
+    
+    // Address Information
+    home_town: user?.home_town || '',
+    permanent_address: user?.permanent_address || '',
+    emergency_address: user?.emergency_address || '',
+    
+    // Identity Information
+    id_proof_type: user?.id_proof_type || '',
+    id_proof_number: user?.id_proof_number || '',
+    
+    // Parent Information
     parent_phone: user?.parent_phone || '',
-    parent_email: user?.parent_email || ''
+    parent_email: user?.parent_email || '',
+    parent_occupation: user?.parent_occupation || ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -567,134 +718,482 @@ const Profile = () => {
     }
   };
 
+  const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+  const idProofTypes = ['Aadhar Card', 'PAN Card', 'Driving License', 'Passport', 'Voter ID', 'College ID'];
+  const departments = ['Computer Science', 'Information Technology', 'Electronics', 'Mechanical', 'Civil', 'Chemical', 'Biotechnology', 'Other'];
+  const years = [1, 2, 3, 4];
+
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="lg">
       <Typography variant="h4" component="h1" gutterBottom>
         My Profile
       </Typography>
 
-      <Card>
-        <CardContent>
-          <Box display="flex" alignItems="center" mb={3}>
-            <Avatar sx={{ width: 80, height: 80, mr: 2 }}>
-              {user?.name?.charAt(0)}
-            </Avatar>
-            <Box>
-              <Typography variant="h5">{user?.name}</Typography>
-              <Typography variant="body2" color="textSecondary">
-                Student ID: {user?.student_id}
-              </Typography>
-            </Box>
-          </Box>
-
-          <Divider sx={{ my: 2 }} />
-
-          {editing ? (
-            <Box component="form" onSubmit={handleSubmit}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Typography variant="h6" gutterBottom>
-                    Contact Information
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <input
-                    type="text"
-                    name="phone"
-                    placeholder="Phone Number"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <input
-                    type="text"
-                    name="parent_phone"
-                    placeholder="Parent Phone"
-                    value={formData.parent_phone}
-                    onChange={handleChange}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <input
-                    type="email"
-                    name="parent_email"
-                    placeholder="Parent Email"
-                    value={formData.parent_email}
-                    onChange={handleChange}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px'
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Box display="flex" gap={2}>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      disabled={loading}
-                    >
-                      {loading ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => setEditing(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Box>
-          ) : (
-            <Box>
+      <Grid container spacing={3}>
+        {/* Basic Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
               <Typography variant="h6" gutterBottom>
-                Contact Information
+                Basic Information
               </Typography>
               
-              <Typography variant="body2" gutterBottom>
-                <strong>Email:</strong> {user?.email}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Phone:</strong> {user?.phone || 'Not provided'}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Parent Phone:</strong> {user?.parent_phone || 'Not provided'}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Parent Email:</strong> {user?.parent_email || 'Not provided'}
-              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Name:</strong> {user?.name}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Student ID:</strong> {user?.student_id}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  <strong>Email:</strong> {user?.email}
+                </Typography>
+                {editing ? (
+                  <>
+                    <TextField
+                      fullWidth
+                      label="Phone"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      margin="normal"
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Room Number"
+                      name="room_number"
+                      value={formData.room_number}
+                      onChange={handleChange}
+                      margin="normal"
+                      size="small"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Typography variant="body2" color="textSecondary">
+                      <strong>Phone:</strong> {user?.phone}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      <strong>Room Number:</strong> {user?.room_number}
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-              <Button
-                variant="contained"
-                onClick={() => setEditing(true)}
-                sx={{ mt: 2 }}
-              >
-                Edit Profile
-              </Button>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+        {/* Academic Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Academic Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="College Name"
+                      name="college_name"
+                      value={formData.college_name}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Current Year</InputLabel>
+                      <Select
+                        name="current_year"
+                        value={formData.current_year}
+                        onChange={handleChange}
+                        label="Current Year"
+                      >
+                        {years.map(year => (
+                          <MenuItem key={year} value={year}>{year}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Department</InputLabel>
+                      <Select
+                        name="department"
+                        value={formData.department}
+                        onChange={handleChange}
+                        label="Department"
+                      >
+                        {departments.map(dept => (
+                          <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Branch"
+                      name="branch"
+                      value={formData.branch}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Batch"
+                      name="batch"
+                      value={formData.batch}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>College:</strong> {user?.college_name}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Year:</strong> {user?.current_year}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Department:</strong> {user?.department}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Branch:</strong> {user?.branch}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Batch:</strong> {user?.batch}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Personal Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Personal Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Date of Birth"
+                      name="date_of_birth"
+                      type="date"
+                      value={formData.date_of_birth}
+                      onChange={handleChange}
+                      InputLabelProps={{ shrink: true }}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Blood Group</InputLabel>
+                      <Select
+                        name="blood_group"
+                        value={formData.blood_group}
+                        onChange={handleChange}
+                        label="Blood Group"
+                      >
+                        {bloodGroups.map(group => (
+                          <MenuItem key={group} value={group}>{group}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Gender</InputLabel>
+                      <Select
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleChange}
+                        label="Gender"
+                      >
+                        <MenuItem value="Female">Female</MenuItem>
+                        <MenuItem value="Male">Male</MenuItem>
+                        <MenuItem value="Other">Other</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Home Town"
+                      name="home_town"
+                      value={formData.home_town}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Date of Birth:</strong> {user?.date_of_birth}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Blood Group:</strong> {user?.blood_group}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Gender:</strong> {user?.gender}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Home Town:</strong> {user?.home_town}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Address Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Address Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Permanent Address"
+                      name="permanent_address"
+                      multiline
+                      rows={2}
+                      value={formData.permanent_address}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Emergency Address"
+                      name="emergency_address"
+                      multiline
+                      rows={2}
+                      value={formData.emergency_address}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Permanent Address:</strong> {user?.permanent_address}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Emergency Address:</strong> {user?.emergency_address}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Identity Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Identity Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>ID Proof Type</InputLabel>
+                      <Select
+                        name="id_proof_type"
+                        value={formData.id_proof_type}
+                        onChange={handleChange}
+                        label="ID Proof Type"
+                      >
+                        {idProofTypes.map(type => (
+                          <MenuItem key={type} value={type}>{type}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="ID Proof Number"
+                      name="id_proof_number"
+                      value={formData.id_proof_number}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>ID Proof Type:</strong> {user?.id_proof_type}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>ID Proof Number:</strong> {user?.id_proof_number}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Administrative Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Administrative Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Warden Name"
+                      name="warden_name"
+                      value={formData.warden_name}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Warden Contact"
+                      name="warden_contact"
+                      value={formData.warden_contact}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Warden Name:</strong> {user?.warden_name}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Warden Contact:</strong> {user?.warden_contact}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Parent Information Card */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Parent Information
+              </Typography>
+              
+              {editing ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Parent Phone"
+                      name="parent_phone"
+                      value={formData.parent_phone}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Parent Email"
+                      name="parent_email"
+                      type="email"
+                      value={formData.parent_email}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Parent Occupation"
+                      name="parent_occupation"
+                      value={formData.parent_occupation}
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              ) : (
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Parent Name:</strong> {user?.parent_name}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Parent Phone:</strong> {user?.parent_phone}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Parent Email:</strong> {user?.parent_email}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Parent Occupation:</strong> {user?.parent_occupation}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+        {editing ? (
+          <>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="contained"
+            onClick={() => setEditing(true)}
+          >
+            Edit Profile
+          </Button>
+        )}
+      </Box>
     </Container>
   );
 };

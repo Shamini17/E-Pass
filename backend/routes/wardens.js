@@ -162,7 +162,7 @@ router.put('/outpass/:id', [
                 `UPDATE outpass_requests 
                  SET status = 'approved', approved_by = ?, approved_at = ?, qr_code = ?, qr_expires_at = ?
                  WHERE id = ?`,
-                [wardenId, now, qrData, qrExpiresAt, id]
+                [wardenId, now, qrCode, qrExpiresAt, id]
             );
 
             // Send notification to student and parents

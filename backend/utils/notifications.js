@@ -1,12 +1,10 @@
 const twilio = require('twilio');
 const nodemailer = require('nodemailer');
-const { pool } = require('../config/database');
+const { get, run } = require('../config/database');
 
-// Initialize Twilio client only if credentials are properly configured
+// Initialize Twilio client
 let twilioClient = null;
-if (process.env.TWILIO_ACCOUNT_SID && 
-    process.env.TWILIO_AUTH_TOKEN && 
-    process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
     try {
         twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
         console.log('✅ Twilio client initialized successfully');
@@ -18,14 +16,12 @@ if (process.env.TWILIO_ACCOUNT_SID &&
     console.log('ℹ️ Twilio credentials not configured, SMS notifications disabled');
 }
 
-// Initialize email transporter only if credentials are properly configured
+// Initialize email transporter
 let emailTransporter = null;
-if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     try {
         emailTransporter = nodemailer.createTransport({
-            host: process.env.EMAIL_HOST,
-            port: process.env.EMAIL_PORT || 587,
-            secure: false,
+            service: 'gmail',
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
@@ -44,20 +40,18 @@ if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) 
 const sendNotification = async ({ studentId, type, message }) => {
     try {
         // Get student and parent details
-        const [students] = await pool.execute(
+        const student = await get(
             'SELECT name, parent_phone, parent_email FROM students WHERE id = ?',
             [studentId]
         );
 
-        if (students.length === 0) {
+        if (!student) {
             console.error('Student not found for notification:', studentId);
             return;
         }
 
-        const student = students[0];
-
         // Log notification in database
-        const [notificationResult] = await pool.execute(
+        const notificationResult = await run(
             'INSERT INTO notifications (student_id, type, message) VALUES (?, ?, ?)',
             [studentId, type, message]
         );
@@ -107,13 +101,13 @@ const sendNotification = async ({ studentId, type, message }) => {
         const sentVia = smsSent && emailSent ? 'both' : smsSent ? 'sms' : emailSent ? 'email' : 'none';
         const status = (smsSent || emailSent) ? 'sent' : 'failed';
 
-        await pool.execute(
+        await run(
             'UPDATE notifications SET sent_via = ?, status = ? WHERE id = ?',
-            [sentVia, status, notificationResult.insertId]
+            [sentVia, status, notificationResult.id]
         );
 
         return {
-            notificationId: notificationResult.insertId,
+            notificationId: notificationResult.id,
             smsSent,
             emailSent,
             status

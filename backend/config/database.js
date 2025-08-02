@@ -30,9 +30,38 @@ const initializeDatabase = () => {
             password TEXT NOT NULL,
             phone TEXT,
             room_number TEXT,
+            
+            -- Academic Information
+            current_year INTEGER,
+            department TEXT,
+            branch TEXT,
+            batch TEXT,
+            college_name TEXT,
+            
+            -- Administrative Information
+            warden_name TEXT,
+            warden_contact TEXT,
+            
+            -- Personal Information
+            date_of_birth TEXT,
+            blood_group TEXT,
+            gender TEXT,
+            
+            -- Address Information
+            home_town TEXT,
+            permanent_address TEXT,
+            emergency_address TEXT,
+            
+            -- Identity Information
+            id_proof_type TEXT,
+            id_proof_number TEXT,
+            
+            -- Parent Information
             parent_name TEXT,
             parent_phone TEXT,
             parent_email TEXT,
+            parent_occupation TEXT,
+            
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -66,6 +95,8 @@ const initializeDatabase = () => {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
             reason TEXT NOT NULL,
+            place TEXT NOT NULL,
+            city TEXT NOT NULL,
             from_date TEXT NOT NULL,
             from_time TEXT NOT NULL,
             to_date TEXT NOT NULL,
@@ -118,8 +149,95 @@ const initializeDatabase = () => {
             console.error('❌ Error creating tables:', err.message);
         } else {
             console.log('✅ Database tables created successfully');
+            // Add migration for place and city columns
+            addPlaceCityColumns();
+            addStudentProfileColumns(); // Add this line to call the new migration
             insertSampleData();
         }
+    });
+};
+
+// Migration to add place and city columns
+const addPlaceCityColumns = () => {
+    // Check if place column exists
+    db.get("PRAGMA table_info(outpass_requests)", (err, rows) => {
+        if (err) {
+            console.error('Error checking table schema:', err);
+            return;
+        }
+        
+        db.all("PRAGMA table_info(outpass_requests)", (err, columns) => {
+            if (err) {
+                console.error('Error getting table info:', err);
+                return;
+            }
+            
+            const hasPlace = columns.some(col => col.name === 'place');
+            const hasCity = columns.some(col => col.name === 'city');
+            
+            if (!hasPlace) {
+                db.run('ALTER TABLE outpass_requests ADD COLUMN place TEXT DEFAULT "Not specified"', (err) => {
+                    if (err) {
+                        console.error('Error adding place column:', err);
+                    } else {
+                        console.log('✅ Added place column to outpass_requests table');
+                    }
+                });
+            }
+            
+            if (!hasCity) {
+                db.run('ALTER TABLE outpass_requests ADD COLUMN city TEXT DEFAULT "Not specified"', (err) => {
+                    if (err) {
+                        console.error('Error adding city column:', err);
+                    } else {
+                        console.log('✅ Added city column to outpass_requests table');
+                    }
+                });
+            }
+        });
+    });
+};
+
+// Migration to add comprehensive student profile columns
+const addStudentProfileColumns = () => {
+    db.all("PRAGMA table_info(students)", (err, columns) => {
+        if (err) {
+            console.error('Error getting students table info:', err);
+            return;
+        }
+        
+        const newColumns = [
+            { name: 'current_year', type: 'INTEGER', default: '1' },
+            { name: 'department', type: 'TEXT', default: 'Not specified' },
+            { name: 'branch', type: 'TEXT', default: 'Not specified' },
+            { name: 'batch', type: 'TEXT', default: 'Not specified' },
+            { name: 'college_name', type: 'TEXT', default: 'Not specified' },
+            { name: 'warden_name', type: 'TEXT', default: 'Not specified' },
+            { name: 'warden_contact', type: 'TEXT', default: 'Not specified' },
+            { name: 'date_of_birth', type: 'TEXT', default: 'Not specified' },
+            { name: 'blood_group', type: 'TEXT', default: 'Not specified' },
+            { name: 'gender', type: 'TEXT', default: 'Not specified' },
+            { name: 'home_town', type: 'TEXT', default: 'Not specified' },
+            { name: 'permanent_address', type: 'TEXT', default: 'Not specified' },
+            { name: 'emergency_address', type: 'TEXT', default: 'Not specified' },
+            { name: 'id_proof_type', type: 'TEXT', default: 'Not specified' },
+            { name: 'id_proof_number', type: 'TEXT', default: 'Not specified' },
+            { name: 'parent_occupation', type: 'TEXT', default: 'Not specified' }
+        ];
+        
+        newColumns.forEach(column => {
+            const exists = columns.some(col => col.name === column.name);
+            if (!exists) {
+                const defaultValue = column.default ? `DEFAULT "${column.default}"` : '';
+                db.run(`ALTER TABLE students ADD COLUMN ${column.name} ${column.type} ${defaultValue}`, (err) => {
+                    if (err) {
+                        console.error(`Error adding ${column.name} column:`, err);
+                    } else {
+                        console.log(`✅ Added ${column.name} column to students table`);
+                    }
+                });
+            }
+        });
     });
 };
 
