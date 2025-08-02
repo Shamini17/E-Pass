@@ -20,7 +20,8 @@ import {
   Refresh as RefreshIcon,
   AccessTime as TimeIcon,
   Person as PersonIcon,
-  LocationOn as LocationIcon
+  LocationOn as LocationIcon,
+  BugReport as DebugIcon
 } from '@mui/icons-material';
 import QRCode from 'qrcode.react';
 import { toast } from 'react-toastify';
@@ -31,12 +32,13 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
   const [error, setError] = useState('');
   const [expiresAt, setExpiresAt] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     if (open) {
       generateDemoQRCode();
     }
-  }, [open]); // Remove generateDemoQRCode from dependency to avoid infinite loop
+  }, [open]);
 
   useEffect(() => {
     let interval;
@@ -61,8 +63,11 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
     setLoading(true);
     setError('');
     setQrData(null);
+    setDebugInfo('');
 
     try {
+      console.log('🔄 Generating Demo QR code...');
+      
       // Create demo QR data immediately
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
       const qrData = {
@@ -81,13 +86,22 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
         type: 'demo_qr'
       };
 
-      setQrData(JSON.stringify(qrData));
+      const qrString = JSON.stringify(qrData);
+      setQrData(qrString);
       setExpiresAt(expiresAt.toISOString());
       setTimeRemaining(5 * 60 * 1000);
+      setDebugInfo(`Demo QR Generated, Length: ${qrString.length}`);
+      
+      console.log('✅ Demo QR Code generated successfully:', {
+        length: qrString.length,
+        preview: qrString.substring(0, 100) + '...'
+      });
       
       toast.success('Demo QR code generated successfully!');
     } catch (error) {
+      console.error('❌ Demo QR Code generation failed:', error);
       setError('Failed to generate demo QR code');
+      setDebugInfo(`Error: ${error.message}`);
       toast.error('Failed to generate demo QR code');
     } finally {
       setLoading(false);
@@ -123,6 +137,9 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
               margin: 20px 0; 
               display: flex;
               justify-content: center;
+              border: 2px solid #333;
+              padding: 20px;
+              background: white;
             }
             .details { 
               margin: 20px 0; 
@@ -231,6 +248,9 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
     return 'success';
   };
 
+  // Check if QR data is valid
+  const isValidQRData = qrData && qrData.length > 0;
+
   if (!open) return null;
 
   return (
@@ -265,7 +285,7 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
-        ) : qrData ? (
+        ) : isValidQRData ? (
           <Box>
             {/* Student Info */}
             {studentData && (
@@ -283,14 +303,34 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
               </Paper>
             )}
 
-            {/* QR Code */}
-            <Paper elevation={3} sx={{ p: 3, textAlign: 'center', mb: 2 }}>
-              <QRCode
-                value={qrData}
-                size={200}
-                level="H"
-                includeMargin={true}
-              />
+            {/* QR Code Container with Enhanced Styling */}
+            <Paper 
+              elevation={3} 
+              sx={{ 
+                p: 3, 
+                textAlign: 'center', 
+                mb: 2,
+                border: '2px solid #e0e0e0',
+                backgroundColor: '#fafafa'
+              }}
+            >
+              {/* QR Code Rendering */}
+              <Box>
+                <QRCode
+                  value={qrData}
+                  size={200}
+                  level="H"
+                  includeMargin={true}
+                  style={{
+                    border: '1px solid #ccc',
+                    borderRadius: '8px',
+                    backgroundColor: 'white'
+                  }}
+                />
+                <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                  (Demo QR Code)
+                </Typography>
+              </Box>
               
               {/* Expiry Timer */}
               {expiresAt && (
@@ -304,6 +344,24 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
                 </Box>
               )}
             </Paper>
+
+            {/* Debug Information (Development Only) */}
+            {process.env.NODE_ENV === 'development' && debugInfo && (
+              <Paper elevation={1} sx={{ p: 2, mb: 2, backgroundColor: '#f5f5f5' }}>
+                <Box display="flex" alignItems="center" mb={1}>
+                  <DebugIcon sx={{ mr: 1, color: 'warning.main' }} />
+                  <Typography variant="subtitle2" color="warning.main">
+                    Debug Info:
+                  </Typography>
+                </Box>
+                <Typography variant="body2" fontFamily="monospace" fontSize="0.8rem">
+                  {debugInfo}
+                </Typography>
+                <Typography variant="body2" fontFamily="monospace" fontSize="0.7rem" color="textSecondary" sx={{ mt: 1 }}>
+                  QR Data Preview: {qrData ? qrData.substring(0, 50) + '...' : 'None'}
+                </Typography>
+              </Paper>
+            )}
 
             {/* Demo Notice */}
             <Alert severity="info" sx={{ mb: 2 }}>
@@ -341,6 +399,12 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
                   </Typography>
                 </Box>
               )}
+              <Box display="flex" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                <Typography variant="body2" color="textSecondary">Type:</Typography>
+                <Typography variant="body2">
+                  Demo JSON String
+                </Typography>
+              </Box>
             </Paper>
           </Box>
         ) : (
@@ -351,13 +415,12 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
       </DialogContent>
       
       <DialogActions>
-        {qrData && (
+        {isValidQRData && (
           <>
             <Button
               startIcon={<PrintIcon />}
               onClick={handlePrint}
               variant="outlined"
-              disabled={!qrData}
             >
               Print
             </Button>
@@ -365,7 +428,6 @@ const DemoQRCode = ({ open, onClose, studentData = null }) => {
               startIcon={<DownloadIcon />}
               onClick={handleDownload}
               variant="outlined"
-              disabled={!qrData}
             >
               Download
             </Button>

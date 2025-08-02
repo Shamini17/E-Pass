@@ -30,6 +30,9 @@ import { studentAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import StudentQRCode from '../components/StudentQRCode';
 import DemoQRCode from '../components/DemoQRCode';
+import QRCodeTest from '../components/QRCodeTest';
+import SimpleQRTest from '../components/SimpleQRTest';
+import QRCodeDebug from '../components/QRCodeDebug';
 
 // Dashboard Overview Component
 const DashboardOverview = () => {
@@ -41,6 +44,7 @@ const DashboardOverview = () => {
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrStatus, setQrStatus] = useState(null);
   const [demoQrDialogOpen, setDemoQrDialogOpen] = useState(false);
+  const [debugQrOpen, setDebugQrOpen] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -193,6 +197,33 @@ const DashboardOverview = () => {
                     >
                       Demo QR
                     </Button>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<QrCodeIcon />}
+                      onClick={() => {
+                        // Simple test - create a QR code directly
+                        const testData = {
+                          student_id: 'TEST001',
+                          name: user?.name || 'Test Student',
+                          timestamp: new Date().toISOString(),
+                          type: 'test'
+                        };
+                        console.log('Testing QR code with data:', testData);
+                        alert('Check console for QR test data. QR code should appear in the dialog.');
+                        setQrDialogOpen(true);
+                      }}
+                    >
+                      Test QR
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      startIcon={<QrCodeIcon />}
+                      onClick={() => setDebugQrOpen(true)}
+                    >
+                      Debug QR
+                    </Button>
                   </Box>
                 </Box>
               ) : (
@@ -306,6 +337,12 @@ const DashboardOverview = () => {
         open={demoQrDialogOpen}
         onClose={() => setDemoQrDialogOpen(false)}
         studentData={user}
+      />
+      
+      {/* Debug QR Code Dialog */}
+      <QRCodeDebug
+        open={debugQrOpen}
+        onClose={() => setDebugQrOpen(false)}
       />
     </Container>
   );
@@ -667,13 +704,12 @@ const Profile = () => {
     room_number: user?.room_number || '',
     
     // Academic Information
+    college_name: user?.college_name || '',
     current_year: user?.current_year || 1,
     department: user?.department || '',
+    other_department: user?.other_department || '',
     branch: user?.branch || '',
     batch: user?.batch || '',
-    college_name: user?.college_name || '',
-    
-    // Administrative Information
     warden_name: user?.warden_name || '',
     warden_contact: user?.warden_contact || '',
     
@@ -720,7 +756,16 @@ const Profile = () => {
 
   const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
   const idProofTypes = ['Aadhar Card', 'PAN Card', 'Driving License', 'Passport', 'Voter ID', 'College ID'];
-  const departments = ['Computer Science', 'Information Technology', 'Electronics', 'Mechanical', 'Civil', 'Chemical', 'Biotechnology', 'Other'];
+  const departments = [
+    'Automobile Engineering',
+    'Civil Engineering',
+    'Computer Science Engineering',
+    'Electrical and Communication Engineering',
+    'Electrical and Electronics Engineering',
+    'Information Technology',
+    'Mechanical Engineering',
+    'Others'
+  ];
   const years = [1, 2, 3, 4];
 
   return (
@@ -834,6 +879,20 @@ const Profile = () => {
                       </Select>
                     </FormControl>
                   </Grid>
+                  {formData.department === 'Others' && (
+                    <Grid item xs={6}>
+                      <TextField
+                        fullWidth
+                        label="Specify Department"
+                        name="other_department"
+                        value={formData.other_department || ''}
+                        onChange={handleChange}
+                        size="small"
+                        helperText="Please specify your department name"
+                        placeholder="e.g., Biotechnology, Chemical Engineering, etc."
+                      />
+                    </Grid>
+                  )}
                   <Grid item xs={6}>
                     <TextField
                       fullWidth
@@ -1296,6 +1355,7 @@ const StudentDashboard = () => {
       <Route path="/outpasses" element={<MyOutpasses />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/test-qr" element={<QRCodeTest />} />
     </Routes>
   );
 };

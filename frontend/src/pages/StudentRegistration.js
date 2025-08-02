@@ -33,6 +33,7 @@ const StudentRegistration = () => {
     phone: '',
     room_number: '',
     department: '',
+    other_department: '',
     parent_name: '',
     parent_phone: '',
     parent_email: ''
@@ -56,6 +57,12 @@ const StudentRegistration = () => {
     // Frontend validation
     const requiredFields = ['name', 'email', 'password', 'student_id', 'phone', 'room_number', 'department', 'parent_name', 'parent_phone'];
     const missingFields = requiredFields.filter(field => !formData[field] || formData[field].trim() === '');
+    
+    // Special validation for "Others" department
+    if (formData.department === 'Others' && (!formData.other_department || formData.other_department.trim() === '')) {
+      alert('Please specify your department name when selecting "Others"');
+      return;
+    }
     
     if (missingFields.length > 0) {
       alert(`Please fill in all required fields: ${missingFields.join(', ')}`);
@@ -91,6 +98,12 @@ const StudentRegistration = () => {
       // Prepare registration data, excluding empty parent_email
       const registrationData = { ...formData, role: 'student' };
       
+      // Handle "Others" department - use the specified department name
+      if (registrationData.department === 'Others' && registrationData.other_department) {
+        registrationData.department = registrationData.other_department;
+        delete registrationData.other_department;
+      }
+      
       // Remove parent_email if it's empty
       if (!registrationData.parent_email || registrationData.parent_email.trim() === '') {
         delete registrationData.parent_email;
@@ -120,7 +133,16 @@ const StudentRegistration = () => {
     }
   };
 
-  const departments = ['Computer Science', 'Information Technology', 'Electronics', 'Mechanical', 'Civil', 'Chemical', 'Biotechnology', 'Other'];
+  const departments = [
+    'Automobile Engineering',
+    'Civil Engineering',
+    'Computer Science Engineering',
+    'Electrical and Communication Engineering',
+    'Electrical and Electronics Engineering',
+    'Information Technology',
+    'Mechanical Engineering',
+    'Others'
+  ];
 
   if (success) {
     return (
@@ -259,6 +281,22 @@ const StudentRegistration = () => {
                     </Select>
                   </FormControl>
                 </Grid>
+
+                {/* Conditional field for "Others" department */}
+                {formData.department === 'Others' && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Specify Department"
+                      name="other_department"
+                      value={formData.other_department || ''}
+                      onChange={handleChange}
+                      required
+                      helperText="Please specify your department name"
+                      placeholder="e.g., Biotechnology, Chemical Engineering, etc."
+                    />
+                  </Grid>
+                )}
 
                 {/* Parent Information */}
                 <Grid item xs={12}>

@@ -20,7 +20,8 @@ import {
   Refresh as RefreshIcon,
   AccessTime as TimeIcon,
   Person as PersonIcon,
-  LocationOn as LocationIcon
+  LocationOn as LocationIcon,
+  BugReport as DebugIcon
 } from '@mui/icons-material';
 import QRCode from 'qrcode.react';
 import { studentAPI } from '../services/api';
@@ -32,6 +33,7 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
   const [error, setError] = useState('');
   const [expiresAt, setExpiresAt] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -62,19 +64,42 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
     setLoading(true);
     setError('');
     setQrData(null);
+    setDebugInfo('');
 
     try {
+      console.log('🔄 Generating QR code...');
       const response = await studentAPI.generateQR();
+      console.log('📡 API Response:', response);
+      
       const { qr_code, expires_at } = response.data;
+      
+      // Validate QR code data
+      if (!qr_code) {
+        throw new Error('No QR code data received from server');
+      }
+      
+      // Check if it's a base64 image or JSON string
+      const isBase64Image = qr_code.startsWith('data:image/') || qr_code.startsWith('iVBORw0KGgo');
       
       setQrData(qr_code);
       setExpiresAt(expires_at);
       setTimeRemaining(new Date(expires_at) - new Date());
       
+      // Set debug info
+      setDebugInfo(`QR Type: ${isBase64Image ? 'Base64 Image' : 'JSON String'}, Length: ${qr_code.length}`);
+      
+      console.log('✅ QR Code generated successfully:', {
+        type: isBase64Image ? 'Base64 Image' : 'JSON String',
+        length: qr_code.length,
+        preview: qr_code.substring(0, 100) + '...'
+      });
+      
       toast.success('QR code generated successfully!');
     } catch (error) {
-      const errorMessage = error.response?.data?.error || 'Failed to generate QR code';
+      console.error('❌ QR Code generation failed:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to generate QR code';
       setError(errorMessage);
+      setDebugInfo(`Error: ${errorMessage}`);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -110,6 +135,9 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
               margin: 20px 0; 
               display: flex;
               justify-content: center;
+              border: 2px solid #333;
+              padding: 20px;
+              background: white;
             }
             .details { 
               margin: 20px 0; 
@@ -218,6 +246,15 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
     return 'success';
   };
 
+  // Check if QR data is valid
+  const isValidQRData = qrData && qrData.length > 0;
+  
+  // Check if it's a base64 image
+  const isBase64Image = qrData && (qrData.startsWith('data:image/') || qrData.startsWith('iVBORw0KGgo'));
+
+  // Ensure we have a valid string for QR code generation
+  const qrCodeValue = isValidQRData ? qrData : 'No data available';
+
   if (!open) return null;
 
   return (
@@ -252,7 +289,7 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
-        ) : qrData ? (
+        ) : (
           <Box>
             {/* Student Info */}
             {studentData && (
@@ -270,14 +307,34 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
               </Paper>
             )}
 
-            {/* QR Code */}
-            <Paper elevation={3} sx={{ p: 3, textAlign: 'center', mb: 2 }}>
-              <QRCode
-                value={qrData}
-                size={200}
-                level="H"
-                includeMargin={true}
-              />
+            {/* QR Code Container with Enhanced Styling */}
+            <Paper 
+              elevation={3} 
+              sx={{ 
+                p: 3, 
+                textAlign: 'center', 
+                mb: 2,
+                border: '2px solid #e0e0e0',
+                backgroundColor: '#fafafa'
+              }}
+            >
+              {/* Always render QR code - with fallback if no data */}
+              <Box>
+                <QRCode
+                  value={qrData || 'No QR data available'}
+                  size={200}
+                  level="H"
+                  includeMargin={true}
+                  style={{
+                    border: '1px solid #ccc',
+                    borderRadius: '8px',
+                    backgroundColor: 'white'
+                  }}
+                />
+                <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                  {qrData ? (isBase64Image ? '(Base64 Image)' : '(Generated QR Code)') : '(Fallback QR Code)'}
+                </Typography>
+              </Box>
               
               {/* Expiry Timer */}
               {expiresAt && (
@@ -291,6 +348,27 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
                 </Box>
               )}
             </Paper>
+
+            {/* Debug Information (Development Only) */}
+            {process.env.NODE_ENV === 'development' && (
+              <Paper elevation={1} sx={{ p: 2, mb: 2, backgroundColor: '#f5f5f5' }}>
+                <Box display="flex" alignItems="center" mb={1}>
+                  <DebugIcon sx={{ mr: 1, color: 'warning.main' }} />
+                  <Typography variant="subtitle2" color="warning.main">
+                    Debug Info:
+                  </Typography>
+                </Box>
+                <Typography variant="body2" fontFamily="monospace" fontSize="0.8rem">
+                  {debugInfo || 'No debug info available'}
+                </Typography>
+                <Typography variant="body2" fontFamily="monospace" fontSize="0.7rem" color="textSecondary" sx={{ mt: 1 }}>
+                  QR Data Length: {qrData ? qrData.length : 0} | Type: {isBase64Image ? 'Base64' : 'String'}
+                </Typography>
+                <Typography variant="body2" fontFamily="monospace" fontSize="0.7rem" color="textSecondary">
+                  QR Value Preview: {qrCodeValue.substring(0, 50) + '...'}
+                </Typography>
+              </Paper>
+            )}
 
             {/* Instructions */}
             <Alert severity="info" sx={{ mb: 2 }}>
@@ -328,36 +406,32 @@ const StudentQRCode = ({ open, onClose, studentData = null }) => {
                   </Typography>
                 </Box>
               )}
+              <Box display="flex" justifyContent="space-between" sx={{ mt: 0.5 }}>
+                <Typography variant="body2" color="textSecondary">Type:</Typography>
+                <Typography variant="body2">
+                  {isValidQRData ? (isBase64Image ? 'Base64 Image' : 'JSON String') : 'Fallback'}
+                </Typography>
+              </Box>
             </Paper>
           </Box>
-        ) : (
-          <Alert severity="info">
-            No QR code data available. Click "Refresh" to generate a new QR code.
-          </Alert>
         )}
       </DialogContent>
       
       <DialogActions>
-        {qrData && (
-          <>
-            <Button
-              startIcon={<PrintIcon />}
-              onClick={handlePrint}
-              variant="outlined"
-              disabled={!qrData}
-            >
-              Print
-            </Button>
-            <Button
-              startIcon={<DownloadIcon />}
-              onClick={handleDownload}
-              variant="outlined"
-              disabled={!qrData}
-            >
-              Download
-            </Button>
-          </>
-        )}
+        <Button
+          startIcon={<PrintIcon />}
+          onClick={handlePrint}
+          variant="outlined"
+        >
+          Print
+        </Button>
+        <Button
+          startIcon={<DownloadIcon />}
+          onClick={handleDownload}
+          variant="outlined"
+        >
+          Download
+        </Button>
         <Button onClick={onClose} variant="contained">
           Close
         </Button>
