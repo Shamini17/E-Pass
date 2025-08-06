@@ -44,6 +44,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { wardenAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import QRCode from 'qrcode.react';
+import QRCodeDisplay from '../components/QRCodeDisplay';
 
 const WardenDashboard = () => {
   const { user, isAuthenticated } = useAuth();
@@ -66,6 +67,8 @@ const WardenDashboard = () => {
     status: 'approved',
     comments: ''
   });
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [selectedOutpassForQR, setSelectedOutpassForQR] = useState(null);
 
   // Debug authentication state
   console.log('WardenDashboard - User:', user, 'IsAuthenticated:', isAuthenticated);
@@ -194,10 +197,34 @@ const WardenDashboard = () => {
   }, [handleBackNavigation]);
 
   const handleApproveOutpass = async (outpass) => {
-    console.log('handleApproveOutpass called with:', outpass);
     setSelectedOutpass(outpass);
+    // Always reset approval data to default when opening the dialog
+    setApprovalData({ status: 'approved', comments: '' });
     setApprovalDialog(true);
-    console.log('Dialog should now be open with selectedOutpass:', outpass);
+  };
+
+  const handleViewQR = async (outpass) => {
+    if (!outpass.qr_code) {
+      // Try to fetch the latest outpass data if qr_code is missing
+      try {
+        const response = await wardenAPI.getAllOutpasses({ limit: 100 });
+        const updatedOutpass = response.data.outpasses.find(o => o.id === outpass.id);
+        if (updatedOutpass && updatedOutpass.qr_code) {
+          setSelectedOutpassForQR(updatedOutpass);
+          setQrDialogOpen(true);
+          return;
+        } else {
+          toast.error('QR code not available for this outpass. Please try again later.');
+          return;
+        }
+      } catch (error) {
+        toast.error('Failed to load QR code data. Please try again.');
+        return;
+      }
+    }
+    // If qr_code is present, open the dialog directly
+    setSelectedOutpassForQR(outpass);
+    setQrDialogOpen(true);
   };
 
   const handleApprovalSubmit = async () => {
@@ -214,11 +241,20 @@ const WardenDashboard = () => {
       if (approvalData.status === 'approved' && response.data.qrCode) {
         console.log('QR Code received, updating selectedOutpass');
         // Update the selectedOutpass with QR code data for display
-        setSelectedOutpass({
+        const updatedOutpass = {
           ...selectedOutpass,
           qr_code: response.data.qrCode,
           status: 'approved'
-        });
+        };
+        setSelectedOutpass(updatedOutpass);
+        
+        // Also update the allOutpasses list to include the QR code
+        setAllOutpasses(prevOutpasses => 
+          prevOutpasses.map(o => 
+            o.id === selectedOutpass.id ? updatedOutpass : o
+          )
+        );
+        
         toast.success('Outpass approved successfully! QR code generated.');
       } else {
         console.log('No QR code in response or not approved');
@@ -226,7 +262,8 @@ const WardenDashboard = () => {
         setApprovalDialog(false);
         setSelectedOutpass(null);
         setApprovalData({ status: 'approved', comments: '' });
-        fetchDashboardData();
+        // Refresh data to get updated outpass information
+        await fetchDashboardData();
       }
     } catch (error) {
       console.error('Approval error:', error);
@@ -462,10 +499,7 @@ const WardenDashboard = () => {
                             variant="outlined"
                             size="small"
                             startIcon={<QrCode />}
-                            onClick={() => {
-                              setSelectedOutpass(outpass);
-                              setApprovalDialog(true);
-                            }}
+                            onClick={() => handleViewQR(outpass)}
                           >
                             View QR
                           </Button>
@@ -776,75 +810,10 @@ const WardenDashboard = () => {
         setApprovalData({ status: 'approved', comments: '' });
       }} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {selectedOutpass?.status === 'approved' ? 'View QR Code' : `${approvalData.status === 'approved' ? 'Approve' : 'Reject'} Outpass`}
+          {selectedOutpass?.status === 'pending' ? `${approvalData.status === 'approved' ? 'Approve' : 'Reject'} Outpass` : 'Outpass'}
         </DialogTitle>
         <DialogContent>
-          {console.log('Dialog selectedOutpass:', selectedOutpass)}
-          {selectedOutpass?.status === 'approved' ? (
-            <Box textAlign="center">
-              {selectedOutpass.qr_code ? (
-                // Display existing QR code
-                <>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    QR Code detected, length: {selectedOutpass.qr_code.length}
-                  </Typography>
-                  {selectedOutpass.qr_code.startsWith('data:image') ? (
-                    // Display base64 QR code image
-                    <img 
-                      src={selectedOutpass.qr_code} 
-                      alt="QR Code" 
-                      style={{ width: '200px', height: '200px' }}
-                    />
-                  ) : (
-                    // Generate QR code from data
-                    <QRCode 
-                      value={selectedOutpass.qr_code} 
-                      size={200}
-                      level="M"
-                      includeMargin={true}
-                    />
-                  )}
-                </>
-              ) : (
-                // Generate QR code on-demand for approved outpasses without QR code
-                <>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    Generating QR Code...
-                  </Typography>
-                  <QRCode 
-                    value={JSON.stringify({
-                      outpass_id: selectedOutpass.id,
-                      student_id: selectedOutpass.student_id,
-                      from_date: selectedOutpass.from_date,
-                      to_date: selectedOutpass.to_date,
-                      from_time: selectedOutpass.from_time,
-                      to_time: selectedOutpass.to_time
-                    })} 
-                    size={200}
-                    level="M"
-                    includeMargin={true}
-                  />
-                </>
-              )}
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                {selectedOutpass.student_name} - {selectedOutpass.student_id}
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                {selectedOutpass.from_date} {selectedOutpass.from_time} - {selectedOutpass.to_date} {selectedOutpass.to_time}
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                Place: {selectedOutpass.place || 'Not specified'} | City: {selectedOutpass.city || 'Not specified'}
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                Reason: {selectedOutpass.reason}
-              </Typography>
-              {selectedOutpass.qr_code && (
-                <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
-                  QR Data: {selectedOutpass.qr_code.substring(0, 50)}...
-                </Typography>
-              )}
-            </Box>
-          ) : (
+          {selectedOutpass?.status === 'pending' ? (
             <Box>
               <Typography variant="body1" gutterBottom>
                 Student: {selectedOutpass?.student_name} ({selectedOutpass?.student_id})
@@ -864,16 +833,16 @@ const WardenDashboard = () => {
                 </Select>
               </FormControl>
               <TextField
+                label="Comments (optional)"
                 fullWidth
-                label="Comments (Optional)"
                 multiline
-                rows={3}
+                minRows={2}
+                sx={{ mt: 2 }}
                 value={approvalData.comments}
                 onChange={(e) => setApprovalData({ ...approvalData, comments: e.target.value })}
-                sx={{ mt: 2 }}
               />
             </Box>
-          )}
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => {
@@ -894,6 +863,22 @@ const WardenDashboard = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* QR Code Display Dialog */}
+      <QRCodeDisplay
+        outpassId={selectedOutpassForQR?.id}
+        outpassData={selectedOutpassForQR}
+        open={qrDialogOpen}
+        onClose={() => {
+          setQrDialogOpen(false);
+          setSelectedOutpassForQR(null);
+        }}
+      />
+      {console.log('QRCodeDisplay props:', {
+        outpassId: selectedOutpassForQR?.id,
+        outpassData: selectedOutpassForQR,
+        open: qrDialogOpen
+      })}
     </Container>
   );
 };

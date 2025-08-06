@@ -61,6 +61,7 @@ export const studentAPI = {
     getQRStatus: () => api.get('/students/qr/status'),
     validateQR: (data) => api.post('/students/qr/validate', data),
     getStudentQR: (studentId) => api.get(`/students/qr/${studentId}`),
+    logEntryExit: (data) => api.post('/students/qr/log-entry-exit', data),
     
     // Notifications
     getNotifications: (params = {}) => api.get('/students/notifications', { params }),

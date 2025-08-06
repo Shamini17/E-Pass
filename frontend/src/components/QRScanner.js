@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -11,7 +11,8 @@ import {
   CircularProgress,
   Card,
   CardContent,
-  Chip
+  Chip,
+  IconButton
 } from '@mui/material';
 import {
   QrCodeScanner,
@@ -19,8 +20,11 @@ import {
   Login,
   Close,
   CheckCircle,
-  Error
+  Error,
+  CameraAlt,
+  Stop
 } from '@mui/icons-material';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { watchmanAPI } from '../services/api';
 
 const QRScanner = ({ open, onClose }) => {
@@ -29,16 +33,81 @@ const QRScanner = ({ open, onClose }) => {
   const [error, setError] = useState(null);
   const [action, setAction] = useState('exit'); // 'exit' or 'entry'
   const [processing, setProcessing] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
+  
+  const html5QrScannerRef = useRef(null);
 
-  const handleScan = async (qrData) => {
+  const startScanner = useCallback(() => {
+    try {
+      setCameraError(null);
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      html5QrScannerRef.current = new Html5QrcodeScanner(
+        "qr-reader",
+        config,
+        false
+      );
+
+      html5QrScannerRef.current.render(onScanSuccess, onScanFailure);
+      
+    } catch (error) {
+      console.error('Scanner start error:', error);
+      setCameraError('Failed to start camera scanner. Please check camera permissions.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open && scanning) {
+      startScanner();
+    } else if (!scanning && html5QrScannerRef.current) {
+      stopScanner();
+    }
+
+    return () => {
+      if (html5QrScannerRef.current) {
+        stopScanner();
+      }
+    };
+  }, [open, scanning, startScanner]);
+
+  const stopScanner = () => {
+    if (html5QrScannerRef.current) {
+      try {
+        html5QrScannerRef.current.clear();
+        html5QrScannerRef.current = null;
+      } catch (error) {
+        console.error('Scanner stop error:', error);
+      }
+    }
+  };
+
+  const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log('QR Code detected:', decodedText);
+    
     if (processing) return;
     
     setProcessing(true);
     setError(null);
     setResult(null);
+    setScanning(false);
 
     try {
-      console.log('Scanning QR code:', qrData);
+      // Try to parse JSON if it's a JSON string
+      let qrData = decodedText;
+      try {
+        const parsed = JSON.parse(decodedText);
+        qrData = JSON.stringify(parsed);
+      } catch (e) {
+        // If not JSON, use as is
+        qrData = decodedText;
+      }
+
+      console.log('Processing QR data:', qrData);
       
       const response = await watchmanAPI.scanQR({
         qrData: qrData,
@@ -56,10 +125,16 @@ const QRScanner = ({ open, onClose }) => {
     }
   };
 
+  const onScanFailure = (error) => {
+    // This is called when QR code scanning fails
+    // We don't need to handle this as it's just scanning attempts
+    console.log('Scan attempt failed:', error);
+  };
+
   const handleManualInput = () => {
     const qrData = prompt('Enter QR code data (JSON format):');
     if (qrData) {
-      handleScan(qrData);
+      onScanSuccess(qrData);
     }
   };
 
@@ -67,11 +142,21 @@ const QRScanner = ({ open, onClose }) => {
     setResult(null);
     setError(null);
     setScanning(false);
+    setCameraError(null);
+    stopScanner();
   };
 
   const handleClose = () => {
     resetScanner();
     onClose();
+  };
+
+  const toggleScanner = () => {
+    if (scanning) {
+      setScanning(false);
+    } else {
+      setScanning(true);
+    }
   };
 
   return (
@@ -86,9 +171,9 @@ const QRScanner = ({ open, onClose }) => {
           <Typography variant="h6">
             QR Code Scanner
           </Typography>
-          <Button onClick={handleClose} startIcon={<Close />}>
-            Close
-          </Button>
+          <IconButton onClick={handleClose} size="small">
+            <Close />
+          </IconButton>
         </Box>
       </DialogTitle>
 
@@ -101,6 +186,7 @@ const QRScanner = ({ open, onClose }) => {
                 variant={action === 'exit' ? 'contained' : 'outlined'}
                 startIcon={<ExitToApp />}
                 onClick={() => setAction('exit')}
+                disabled={scanning}
               >
                 Exit Scan
               </Button>
@@ -108,24 +194,67 @@ const QRScanner = ({ open, onClose }) => {
                 variant={action === 'entry' ? 'contained' : 'outlined'}
                 startIcon={<Login />}
                 onClick={() => setAction('entry')}
+                disabled={scanning}
               >
                 Entry Scan
               </Button>
             </Box>
 
+            {/* Camera Error Display */}
+            {cameraError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  {cameraError}
+                </Typography>
+              </Alert>
+            )}
+
             {/* Scanner Interface */}
             <Card>
               <CardContent>
-                <Box textAlign="center" py={4}>
-                  {scanning ? (
+                <Box textAlign="center" py={2}>
+                  {processing ? (
                     <Box>
                       <CircularProgress size={60} />
                       <Typography variant="h6" mt={2}>
-                        Scanning QR Code...
+                        Processing QR Code...
                       </Typography>
                       <Typography variant="body2" color="textSecondary" mt={1}>
-                        Please hold the QR code steady
+                        Please wait while we verify the outpass
                       </Typography>
+                    </Box>
+                  ) : scanning ? (
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        {action === 'exit' ? 'Scan Exit QR Code' : 'Scan Entry QR Code'}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" mb={2}>
+                        Point your camera at the QR code
+                      </Typography>
+                      
+                      {/* Camera Scanner Container */}
+                      <Box 
+                        id="qr-reader" 
+                        sx={{ 
+                          width: '100%', 
+                          maxWidth: '400px', 
+                          margin: '0 auto',
+                          '& video': {
+                            borderRadius: '8px'
+                          }
+                        }}
+                      />
+                      
+                      <Box mt={2}>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          startIcon={<Stop />}
+                          onClick={toggleScanner}
+                        >
+                          Stop Scanner
+                        </Button>
+                      </Box>
                     </Box>
                   ) : (
                     <Box>
@@ -144,10 +273,10 @@ const QRScanner = ({ open, onClose }) => {
                         <Button
                           variant="contained"
                           size="large"
-                          startIcon={<QrCodeScanner />}
-                          onClick={() => setScanning(true)}
+                          startIcon={<CameraAlt />}
+                          onClick={toggleScanner}
                         >
-                          Start Scanner
+                          Start Camera Scanner
                         </Button>
                         <Button
                           variant="outlined"
@@ -172,7 +301,8 @@ const QRScanner = ({ open, onClose }) => {
                 • For <strong>Exit Scan</strong>: Scan when student is leaving the hostel<br/>
                 • For <strong>Entry Scan</strong>: Scan when student is returning to the hostel<br/>
                 • QR codes are only valid during the approved outpass time period<br/>
-                • Late returns will be automatically detected and logged
+                • Late returns will be automatically detected and logged<br/>
+                • Make sure to allow camera permissions when prompted
               </Typography>
             </Box>
           </Box>

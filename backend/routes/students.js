@@ -803,4 +803,121 @@ router.get('/qr/status', [authenticateToken, authorizeStudent], async (req, res)
     }
 });
 
+// Log entry/exit for QR code validation
+router.post('/qr/log-entry-exit', [authenticateToken], async (req, res) => {
+    try {
+        const { qr_data, action } = req.body; // action: 'exit' or 'entry'
+
+        if (!qr_data || !action) {
+            return res.status(400).json({ error: 'QR data and action are required' });
+        }
+
+        let parsedData;
+        try {
+            parsedData = JSON.parse(qr_data);
+        } catch (parseError) {
+            return res.status(400).json({ error: 'Invalid QR code format' });
+        }
+
+        // Get student details
+        const student = await get(
+            'SELECT id, student_id, name, room_number FROM students WHERE student_id = ?',
+            [parsedData.student_id]
+        );
+
+        if (!student) {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Get outpass details
+        const outpass = await get(
+            'SELECT * FROM outpass_requests WHERE id = ? AND status = "approved"',
+            [parsedData.outpass_id]
+        );
+
+        if (!outpass) {
+            return res.status(400).json({ error: 'Invalid outpass' });
+        }
+
+        // Check if outpass is still valid
+        const now = new Date();
+        const outpassEndTime = new Date(`${outpass.to_date} ${outpass.to_time}`);
+        
+        if (now > outpassEndTime) {
+            return res.status(400).json({ error: 'Outpass has expired' });
+        }
+
+        // Get current log entry
+        const currentLog = await get(
+            'SELECT * FROM entry_exit_logs WHERE outpass_id = ? ORDER BY created_at DESC LIMIT 1',
+            [outpass.id]
+        );
+
+        let logId;
+        const timestamp = new Date().toISOString();
+
+        if (action === 'exit') {
+            if (currentLog && currentLog.exit_time) {
+                return res.status(400).json({ error: 'Student has already exited' });
+            }
+
+            if (currentLog) {
+                // Update existing log with exit time
+                await run(
+                    'UPDATE entry_exit_logs SET exit_time = ?, exit_verified_by = ? WHERE id = ?',
+                    [timestamp, req.user.id, currentLog.id]
+                );
+                logId = currentLog.id;
+            } else {
+                // Create new log entry
+                const result = await run(
+                    'INSERT INTO entry_exit_logs (outpass_id, student_id, exit_time, exit_verified_by) VALUES (?, ?, ?, ?)',
+                    [outpass.id, student.id, timestamp, req.user.id]
+                );
+                logId = result.lastID;
+            }
+        } else if (action === 'entry') {
+            if (!currentLog || !currentLog.exit_time) {
+                return res.status(400).json({ error: 'Student must exit first' });
+            }
+
+            if (currentLog.entry_time) {
+                return res.status(400).json({ error: 'Student has already entered' });
+            }
+
+            // Update log with entry time
+            await run(
+                'UPDATE entry_exit_logs SET entry_time = ?, entry_verified_by = ?, return_status = "on_time" WHERE id = ?',
+                [timestamp, req.user.id, currentLog.id]
+            );
+            logId = currentLog.id;
+
+            // Check if return is late
+            if (now > outpassEndTime) {
+                await run(
+                    'UPDATE entry_exit_logs SET return_status = "late" WHERE id = ?',
+                    [logId]
+                );
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Student ${action} logged successfully`,
+            action: action,
+            student: {
+                id: student.id,
+                student_id: student.student_id,
+                name: student.name,
+                room_number: student.room_number
+            },
+            timestamp: timestamp
+        });
+
+    } catch (error) {
+        console.error('Log entry/exit error:', error);
+        res.status(500).json({ error: 'Failed to log entry/exit' });
+    }
+});
+
 module.exports = router; 

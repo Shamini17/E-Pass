@@ -49,7 +49,8 @@ router.get('/outpass', [authenticateToken, authorizeWarden], async (req, res) =>
         const offset = (page - 1) * limit;
 
         let query = `
-            SELECT o.*, s.name as student_name, s.student_id, s.room_number, w.name as approved_by_name
+            SELECT o.*, s.name as student_name, s.student_id, s.room_number, w.name as approved_by_name,
+                   o.qr_code, o.qr_expires_at
             FROM outpass_requests o
             JOIN students s ON o.student_id = s.id
             LEFT JOIN wardens w ON o.approved_by = w.id
